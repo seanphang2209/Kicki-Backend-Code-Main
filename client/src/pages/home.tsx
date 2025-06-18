@@ -43,9 +43,9 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [userInput, setUserInput] = useState<string>("");
   const [userProfile, setUserProfile] = useState({
-    diet: "",
+    diet: "any",
     location: "",
-    budget: ""
+    budget: "any"
   });
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -73,9 +73,9 @@ export default function Home() {
       category: selectedCategory,
       user_input: userInput.trim(),
       user_profile: {
-        diet: userProfile.diet || undefined,
+        diet: userProfile.diet === "any" ? undefined : userProfile.diet,
         location: userProfile.location || undefined,
-        budget: userProfile.budget || undefined
+        budget: userProfile.budget === "any" ? undefined : userProfile.budget
       }
     };
 
@@ -108,7 +108,7 @@ export default function Home() {
   const newQuestion = () => {
     setSelectedCategory("");
     setUserInput("");
-    setUserProfile({ diet: "", location: "", budget: "" });
+    setUserProfile({ diet: "any", location: "", budget: "any" });
     clearResults();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -237,7 +237,7 @@ export default function Home() {
                           <SelectValue placeholder="Any" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Any</SelectItem>
+                          <SelectItem value="any">Any</SelectItem>
                           <SelectItem value="vegetarian">Vegetarian</SelectItem>
                           <SelectItem value="vegan">Vegan</SelectItem>
                           <SelectItem value="keto">Keto</SelectItem>
@@ -268,7 +268,7 @@ export default function Home() {
                           <SelectValue placeholder="Any" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Any</SelectItem>
+                          <SelectItem value="any">Any</SelectItem>
                           <SelectItem value="under $10">Under $10</SelectItem>
                           <SelectItem value="$10-25">$10 - $25</SelectItem>
                           <SelectItem value="$25-50">$25 - $50</SelectItem>
