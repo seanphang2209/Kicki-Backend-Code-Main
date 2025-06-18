@@ -1,6 +1,6 @@
 # 🚀 Kicko AI Backend - Smart Decision Assistant
 
-A powerful, scalable Express.js API backend for **Kicko** — an AI-powered smart assistant that helps users make daily decisions based on context, preferences, and real-time data.
+A powerful, scalable Express.js API backend for **Kicko** — an AI-powered smart assistant that helps users make daily decisions based on context, preferences, and real-time data, with direct integration to third-party services.
 
 ## 🌟 Features
 
@@ -10,6 +10,8 @@ A powerful, scalable Express.js API backend for **Kicko** — an AI-powered smar
 - 🌍 **Multilingual Support** for global users
 - 💾 **In-Memory History** with session management
 - 🔒 **Content Filtering** and validation
+- 🔗 **Third-party Service Integration** (GrabFood, Klook, Netflix, Amazon)
+- 🎯 **Action URLs** with affiliate tracking
 - ✅ **Comprehensive Error Handling** with specific HTTP status codes
 - 🌐 **CORS Support** for frontend integration
 - 📊 **Health Monitoring** and diagnostics
@@ -63,8 +65,15 @@ The server will start on port 5000 (or the port specified in your environment va
 ```json
 {
   "message": "Kicko AI backend is running",
-  "version": "2.0.0",
-  "features": ["AI Suggestions", "Weather Integration", "Context Enrichment", "Multilingual Support"]
+  "version": "3.0.0",
+  "features": [
+    "AI Suggestions", 
+    "Weather Integration", 
+    "Context Enrichment", 
+    "Multilingual Support",
+    "Third-party Service Integration",
+    "Action URLs"
+  ]
 }
 ```
 
@@ -75,7 +84,7 @@ The server will start on port 5000 (or the port specified in your environment va
 ```json
 {
   "status": "OK",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "timestamp": "2024-01-15T10:30:00.000Z",
   "services": {
     "openai": "configured",
@@ -84,11 +93,29 @@ The server will start on port 5000 (or the port specified in your environment va
 }
 ```
 
+### GET `/categories`
+**Get Available Categories**
+- Returns all supported categories and their service configurations
+- **Response:**
+```json
+{
+  "categories": ["What to Eat", "What to Do", "What to Watch", "What to Buy"],
+  "services": {
+    "What to Eat": {
+      "type": "order",
+      "label": "Order on GrabFood",
+      "baseUrl": "https://food.grab.com/sg/en/search/",
+      "affiliateTag": "?utm_source=kicko&utm_medium=referral"
+    }
+  }
+}
+```
+
 ### POST `/ask`
-**Generate AI Suggestions with Smart Context**
+**Generate AI Suggestions with Smart Context and Actions**
 - Accepts JSON request with category, user input, and profile
 - Enriches context with time, weather, and location data
-- Returns AI-generated suggestions with full context
+- Returns AI-generated suggestions with direct action URLs
 
 **Request Body:**
 ```json
@@ -110,11 +137,21 @@ The server will start on port 5000 (or the port specified in your environment va
   "suggestions": [
     {
       "title": "Avocado Salad Bowl",
-      "reason": "Quick, vegetarian-friendly, and refreshing for hot afternoons in Singapore."
+      "reason": "Quick, vegetarian-friendly, and refreshing for hot afternoons in Singapore.",
+      "action": {
+        "type": "order",
+        "label": "Order on GrabFood",
+        "url": "https://food.grab.com/sg/en/search/Avocado%20Salad%20Bowl?utm_source=kicko&utm_medium=referral"
+      }
     },
     {
       "title": "Vegetarian Pho",
-      "reason": "Light soup-based meal perfect for Singapore's humid weather."
+      "reason": "Light soup-based meal perfect for Singapore's humid weather.",
+      "action": {
+        "type": "order",
+        "label": "Order on GrabFood",
+        "url": "https://food.grab.com/sg/en/search/Vegetarian%20Pho?utm_source=kicko&utm_medium=referral"
+      }
     }
   ],
   "context": {
@@ -166,6 +203,30 @@ The server will start on port 5000 (or the port specified in your environment va
   "session_id": "uuid-session-id"
 }
 ```
+
+## 🔗 Third-Party Service Integration
+
+The backend automatically enriches suggestions with action URLs for direct service access:
+
+### What to Eat → GrabFood
+- **Action Type:** `order`
+- **Label:** "Order on GrabFood"
+- **URL:** `https://food.grab.com/sg/en/search/[encoded-title]?utm_source=kicko&utm_medium=referral`
+
+### What to Do → Klook
+- **Action Type:** `book`
+- **Label:** "Book on Klook"
+- **URL:** `https://www.klook.com/en-SG/search/?query=[encoded-title]&utm_source=kicko&utm_medium=referral`
+
+### What to Watch → Netflix
+- **Action Type:** `stream`
+- **Label:** "Watch on Netflix"
+- **URL:** `https://www.netflix.com/search?q=[encoded-title]&utm_source=kicko&utm_medium=referral`
+
+### What to Buy → Amazon
+- **Action Type:** `shop`
+- **Label:** "Buy on Amazon"
+- **URL:** `https://www.amazon.sg/s?k=[encoded-title]&utm_source=kicko&utm_medium=referral`
 
 ## 🌍 Smart Context Enrichment
 
@@ -230,7 +291,12 @@ curl http://localhost:5000/
 curl http://localhost:5000/health
 ```
 
-**Test the ask endpoint with full context:**
+**Test the categories endpoint:**
+```bash
+curl http://localhost:5000/categories
+```
+
+**Test the ask endpoint with GrabFood integration:**
 ```bash
 curl -X POST http://localhost:5000/ask \
   -H "Content-Type: application/json" \
@@ -246,17 +312,46 @@ curl -X POST http://localhost:5000/ask \
   }'
 ```
 
-**Test multilingual support:**
+**Test Klook integration:**
+```bash
+curl -X POST http://localhost:5000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "category": "What to Do",
+    "user_input": "I want to explore something fun this weekend",
+    "user_profile": {
+      "location": "Singapore",
+      "budget": "under $50",
+      "language": "en"
+    }
+  }'
+```
+
+**Test Netflix integration:**
 ```bash
 curl -X POST http://localhost:5000/ask \
   -H "Content-Type: application/json" \
   -d '{
     "category": "What to Watch",
-    "user_input": "I want to watch something relaxing",
+    "user_input": "I want to watch something relaxing and feel-good",
     "user_profile": {
-      "location": "Tokyo",
-      "language": "ja",
-      "budget": "any"
+      "location": "Singapore",
+      "language": "en"
+    }
+  }'
+```
+
+**Test Amazon integration:**
+```bash
+curl -X POST http://localhost:5000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "category": "What to Buy",
+    "user_input": "I need something for my home office",
+    "user_profile": {
+      "location": "Singapore",
+      "budget": "under $100",
+      "language": "en"
     }
   }'
 ```
@@ -305,6 +400,7 @@ All error responses include descriptive messages to help with debugging.
 - ✅ CORS configured for frontend integration
 - ✅ Error messages don't expose sensitive information
 - ✅ Session-based history management
+- ✅ Affiliate tracking for monetization
 
 ## 📦 Dependencies
 
@@ -323,13 +419,23 @@ All error responses include descriptive messages to help with debugging.
 3. **Prompt Building** - Create intelligent prompts with context
 4. **AI Processing** - Generate suggestions with GPT-4
 5. **Response Filtering** - Filter and validate suggestions
-6. **History Storage** - Store interaction in memory
-7. **Response Delivery** - Return structured response with context
+6. **Action Enrichment** - Add third-party service URLs
+7. **History Storage** - Store interaction in memory
+8. **Response Delivery** - Return structured response with context and actions
 
 ### In-Memory Storage
 - User session history (last 3 interactions)
 - Session-based tracking with UUID
 - Automatic cleanup and management
+
+## 💰 Monetization Features
+
+The backend includes built-in monetization capabilities:
+
+- **Affiliate Tracking:** All action URLs include UTM parameters
+- **Service Integration:** Direct links to GrabFood, Klook, Netflix, Amazon
+- **Click Tracking:** Session-based history for user behavior analysis
+- **Revenue Attribution:** Clear source tracking for conversions
 
 ## 🚀 Production Considerations
 
@@ -340,6 +446,8 @@ For production deployment:
 3. **Caching:** Implement response caching for weather data
 4. **Monitoring:** Add logging and monitoring
 5. **Load Balancing:** Use multiple instances behind a load balancer
+6. **Analytics:** Track click-through rates and conversions
+7. **A/B Testing:** Test different affiliate strategies
 
 ## 🐛 Troubleshooting
 
@@ -361,6 +469,10 @@ For production deployment:
    - Ensure location is a valid city name
    - Check that user_profile fields are properly formatted
 
+5. **Action URLs Not Working**
+   - Verify category names match exactly
+   - Check if third-party services are accessible
+
 ## 📄 License
 
 MIT License - feel free to use this code for your own projects!
@@ -375,4 +487,4 @@ MIT License - feel free to use this code for your own projects!
 
 ---
 
-**Built with ❤️ for smart decision-making everywhere!** 
+**Built with ❤️ for smart decision-making and seamless service integration!** 

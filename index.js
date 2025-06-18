@@ -7,10 +7,12 @@
  * Features:
  * - OpenAI GPT-4 integration with smart context enrichment
  * - Real-time weather data integration
+ * - Third-party service integration (GrabFood, Klook, Netflix, Amazon)
  * - In-memory suggestion history
  * - Multilingual support
  * - Response filtering and validation
  * - Comprehensive error handling
+ * - Action URLs for direct service access
  * 
  * Environment Variables Required:
  * - OPENAI_API_KEY: Your OpenAI API key
@@ -49,10 +51,38 @@ const openai = new OpenAI({
 // In-memory storage for user session history (in production, use Redis or database)
 const userHistory = new Map();
 
-// Basic word filter for inappropriate content
+// Enhanced word filter for inappropriate content
 const inappropriateWords = [
-  'inappropriate', 'offensive', 'explicit', 'adult', 'nsfw'
+  'inappropriate', 'offensive', 'explicit', 'adult', 'nsfw', 'violence', 'explicit'
 ];
+
+// Third-party service configurations
+const SERVICE_CONFIGS = {
+  'What to Eat': {
+    type: 'order',
+    label: 'Order on GrabFood',
+    baseUrl: 'https://food.grab.com/sg/en/search/',
+    affiliateTag: '?utm_source=kicko&utm_medium=referral'
+  },
+  'What to Do': {
+    type: 'book',
+    label: 'Book on Klook',
+    baseUrl: 'https://www.klook.com/en-SG/search/?query=',
+    affiliateTag: '&utm_source=kicko&utm_medium=referral'
+  },
+  'What to Watch': {
+    type: 'stream',
+    label: 'Watch on Netflix',
+    baseUrl: 'https://www.netflix.com/search?q=',
+    affiliateTag: '&utm_source=kicko&utm_medium=referral'
+  },
+  'What to Buy': {
+    type: 'shop',
+    label: 'Buy on Amazon',
+    baseUrl: 'https://www.amazon.sg/s?k=',
+    affiliateTag: '&utm_source=kicko&utm_medium=referral'
+  }
+};
 
 // Middleware
 app.use(cors()); // Enable CORS for all origins
@@ -64,8 +94,15 @@ app.use(express.json()); // Parse JSON request bodies
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Kicko AI backend is running',
-    version: '2.0.0',
-    features: ['AI Suggestions', 'Weather Integration', 'Context Enrichment', 'Multilingual Support']
+    version: '3.0.0',
+    features: [
+      'AI Suggestions', 
+      'Weather Integration', 
+      'Context Enrichment', 
+      'Multilingual Support',
+      'Third-party Service Integration',
+      'Action URLs'
+    ]
   });
 });
 
@@ -75,7 +112,7 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    version: '2.0.0',
+    version: '3.0.0',
     timestamp: new Date().toISOString(),
     services: {
       openai: process.env.OPENAI_API_KEY ? 'configured' : 'missing',
@@ -140,6 +177,33 @@ function getTimeContext() {
 }
 
 /**
+ * Enrich suggestions with third-party service actions
+ */
+function enrichSuggestionsWithActions(suggestions, category) {
+  const serviceConfig = SERVICE_CONFIGS[category];
+  
+  if (!serviceConfig) {
+    return suggestions; // No action for unknown categories
+  }
+
+  return suggestions.map(suggestion => {
+    const enrichedSuggestion = { ...suggestion };
+    
+    // Only add action if title exists and is relevant
+    if (suggestion.title && suggestion.title.trim()) {
+      const encodedTitle = encodeURIComponent(suggestion.title.trim());
+      enrichedSuggestion.action = {
+        type: serviceConfig.type,
+        label: serviceConfig.label,
+        url: `${serviceConfig.baseUrl}${encodedTitle}${serviceConfig.affiliateTag}`
+      };
+    }
+    
+    return enrichedSuggestion;
+  });
+}
+
+/**
  * Filter and validate suggestions
  */
 function filterSuggestions(suggestions) {
@@ -190,34 +254,39 @@ async function buildSmartContext(userProfile) {
 }
 
 /**
- * Generate smart prompt for OpenAI
+ * Generate smart prompt for OpenAI with enhanced structure
  */
 function buildSmartPrompt(category, userInput, userProfile, context, language = 'en') {
   const isMultilingual = language !== 'en';
   const languageInstruction = isMultilingual ? `Respond in ${language}.` : '';
 
-  let prompt = `You are Kicko AI, an intelligent daily decision assistant. ${languageInstruction}\n\n`;
-  prompt += `Category: ${category}\n`;
-  prompt += `User Request: ${userInput}\n\n`;
+  let prompt = `You are a smart decision assistant. Based on the user's context and preferences, suggest 3–5 options for: ${category}. ${languageInstruction}\n\n`;
   
   // Add context information
-  prompt += `Current Context:\n`;
-  prompt += `- Time of Day: ${context.time_of_day}\n`;
-  prompt += `- Day of Week: ${context.day_of_week}\n`;
+  prompt += `Time: ${context.current_hour}pm ${context.day_of_week}\n`;
   if (context.weather) {
-    prompt += `- Weather: ${context.weather.temperature}°C, ${context.weather.description}\n`;
+    prompt += `Weather: ${context.weather.description} and ${context.weather.temperature}°C\n`;
   }
-  prompt += `- Location: ${context.user_preferences.location}\n`;
-  prompt += `- Diet: ${context.user_preferences.diet}\n`;
-  prompt += `- Budget: ${context.user_preferences.budget}\n\n`;
+  prompt += `Location: ${context.user_preferences.location}\n`;
+  prompt += `Profile: ${context.user_preferences.diet}, budget ${context.user_preferences.budget}\n\n`;
 
-  prompt += `Instructions:\n`;
-  prompt += `- Generate 3-5 personalized suggestions\n`;
-  prompt += `- Consider the current context (time, weather, location)\n`;
+  prompt += `User Request: ${userInput}\n\n`;
+
+  prompt += `Return results as structured JSON:\n`;
+  prompt += `{\n`;
+  prompt += `  "suggestions": [\n`;
+  prompt += `    {\n`;
+  prompt += `      "title": "Suggestion Title",\n`;
+  prompt += `      "reason": "Detailed reason why this is a good choice"\n`;
+  prompt += `    }\n`;
+  prompt += `  ]\n`;
+  prompt += `}\n\n`;
+
+  prompt += `Guidelines:\n`;
   prompt += `- Make suggestions practical and actionable\n`;
-  prompt += `- Return only a JSON object with a "suggestions" array\n`;
-  prompt += `- Each suggestion must have "title" and "reason" fields\n`;
-  prompt += `- Keep suggestions appropriate and family-friendly\n\n`;
+  prompt += `- Consider the current context (time, weather, location)\n`;
+  prompt += `- Keep suggestions appropriate and family-friendly\n`;
+  prompt += `- Provide specific, detailed reasons\n`;
 
   return prompt;
 }
@@ -300,6 +369,9 @@ app.post('/ask', async (req, res) => {
     // Filter and validate suggestions
     const filteredSuggestions = filterSuggestions(result.suggestions);
 
+    // Enrich suggestions with third-party service actions
+    const enrichedSuggestions = enrichSuggestionsWithActions(filteredSuggestions, category);
+
     // Store in user history (last 3 responses)
     if (!userHistory.has(sessionId)) {
       userHistory.set(sessionId, []);
@@ -310,7 +382,7 @@ app.post('/ask', async (req, res) => {
       timestamp: new Date().toISOString(),
       category,
       user_input,
-      suggestions: filteredSuggestions,
+      suggestions: enrichedSuggestions,
       context
     });
     
@@ -321,7 +393,7 @@ app.post('/ask', async (req, res) => {
 
     // Return structured response
     res.json({ 
-      suggestions: filteredSuggestions,
+      suggestions: enrichedSuggestions,
       context,
       session_id: sessionId,
       history_count: history.length
@@ -387,13 +459,30 @@ app.delete('/history/:sessionId', (req, res) => {
 });
 
 /**
+ * Get available categories endpoint
+ */
+app.get('/categories', (req, res) => {
+  res.json({
+    categories: Object.keys(SERVICE_CONFIGS),
+    services: SERVICE_CONFIGS
+  });
+});
+
+/**
  * 404 handler for undefined routes
  */
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
     message: `The requested endpoint ${req.originalUrl} does not exist.`,
-    available_endpoints: ['GET /', 'GET /health', 'POST /ask', 'GET /history/:sessionId', 'DELETE /history/:sessionId']
+    available_endpoints: [
+      'GET /', 
+      'GET /health', 
+      'POST /ask', 
+      'GET /history/:sessionId', 
+      'DELETE /history/:sessionId',
+      'GET /categories'
+    ]
   });
 });
 
@@ -417,10 +506,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST /ask - Generate AI suggestions`);
   console.log(`   GET  /history/:sessionId - Get user history`);
   console.log(`   DELETE /history/:sessionId - Clear user history`);
+  console.log(`   GET  /categories - Get available categories`);
   console.log(`🔑 OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ Missing'}`);
   console.log(`🌤️  Weather API Key: ${process.env.WEATHER_API_KEY ? '✅ Configured' : '❌ Missing'}`);
   console.log(`💾 In-memory history: Enabled`);
   console.log(`🌍 Multilingual support: Enabled`);
+  console.log(`🔗 Third-party services: ${Object.keys(SERVICE_CONFIGS).join(', ')}`);
 });
 
 export default app; 
