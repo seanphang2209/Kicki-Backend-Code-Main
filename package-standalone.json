@@ -1,13 +1,13 @@
 {
   "name": "kicko-ai-backend",
-  "version": "1.0.0",
-  "description": "Kicko AI - An AI-powered daily decision assistant backend",
+  "version": "2.0.0",
+  "description": "Kicko AI - An AI-powered daily decision assistant backend with weather integration and smart context",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test-api.js"
   },
   "keywords": [
     "ai",
@@ -15,15 +15,20 @@
     "express",
     "api",
     "decision-assistant",
-    "kicko"
+    "kicko",
+    "weather",
+    "context-enrichment",
+    "multilingual"
   ],
   "author": "Kicko AI Team",
   "license": "MIT",
   "dependencies": {
+    "axios": "^1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
-    "openai": "^5.5.1"
+    "openai": "^5.5.1",
+    "uuid": "^9.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -1,7 +1,39 @@
+/**
+ * 🚀 KICKO AI BACKEND - Smart Decision Assistant
+ * 
+ * A powerful, scalable backend API for Kicko - an AI-powered smart assistant
+ * that helps users make daily decisions based on context, preferences, and real-time data.
+ * 
+ * Features:
+ * - OpenAI GPT-4 integration with smart context enrichment
+ * - Real-time weather data integration
+ * - In-memory suggestion history
+ * - Multilingual support
+ * - Response filtering and validation
+ * - Comprehensive error handling
+ * 
+ * Environment Variables Required:
+ * - OPENAI_API_KEY: Your OpenAI API key
+ * - WEATHER_API_KEY: Your OpenWeatherMap API key
+ * - PORT: Server port (default: 5000)
+ * 
+ * Usage:
+ * 1. npm install
+ * 2. Set environment variables
+ * 3. node index.js
+ * 
+ * Test with:
+ * curl -X POST http://localhost:5000/ask \
+ *   -H "Content-Type: application/json" \
+ *   -d '{"category":"What to Eat", "user_input":"I want something light", "user_profile":{"location":"Singapore", "diet":"vegetarian", "budget":"under $10"}}'
+ */
+
 import express from 'express';
 import cors from 'cors';
 import OpenAI from 'openai';
+import axios from 'axios';
 import dotenv from 'dotenv';
+import { v4 as uuidv4 } from 'uuid';
 
 // Load environment variables
 dotenv.config();
@@ -14,6 +46,14 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// In-memory storage for user session history (in production, use Redis or database)
+const userHistory = new Map();
+
+// Basic word filter for inappropriate content
+const inappropriateWords = [
+  'inappropriate', 'offensive', 'explicit', 'adult', 'nsfw'
+];
+
 // Middleware
 app.use(cors()); // Enable CORS for all origins
 app.use(express.json()); // Parse JSON request bodies
@@ -22,11 +62,168 @@ app.use(express.json()); // Parse JSON request bodies
  * Root endpoint - returns a simple status message
  */
 app.get('/', (req, res) => {
-  res.json({ message: 'Kicko AI backend is running' });
+  res.json({ 
+    message: 'Kicko AI backend is running',
+    version: '2.0.0',
+    features: ['AI Suggestions', 'Weather Integration', 'Context Enrichment', 'Multilingual Support']
+  });
 });
 
 /**
- * Main ask endpoint - generates AI-powered suggestions
+ * Health check endpoint for diagnostics
+ */
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    version: '2.0.0',
+    timestamp: new Date().toISOString(),
+    services: {
+      openai: process.env.OPENAI_API_KEY ? 'configured' : 'missing',
+      weather: process.env.WEATHER_API_KEY ? 'configured' : 'missing'
+    }
+  });
+});
+
+/**
+ * Get real-time weather data for location
+ */
+async function getWeatherData(location) {
+  try {
+    if (!process.env.WEATHER_API_KEY) {
+      console.warn('Weather API key not configured, skipping weather data');
+      return null;
+    }
+
+    const response = await axios.get(`https://api.openweathermap.org/data/2.5/weather`, {
+      params: {
+        q: location,
+        appid: process.env.WEATHER_API_KEY,
+        units: 'metric'
+      },
+      timeout: 5000
+    });
+
+    const weather = response.data;
+    return {
+      temperature: Math.round(weather.main.temp),
+      condition: weather.weather[0].main.toLowerCase(),
+      description: weather.weather[0].description,
+      humidity: weather.main.humidity,
+      feels_like: Math.round(weather.main.feels_like)
+    };
+  } catch (error) {
+    console.error('Weather API error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get current time context
+ */
+function getTimeContext() {
+  const now = new Date();
+  const hour = now.getHours();
+  const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+  
+  let timeOfDay;
+  if (hour >= 5 && hour < 12) timeOfDay = 'morning';
+  else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
+  else if (hour >= 17 && hour < 21) timeOfDay = 'evening';
+  else timeOfDay = 'night';
+
+  return {
+    time_of_day: timeOfDay,
+    day_of_week: dayOfWeek,
+    current_hour: hour,
+    is_weekend: ['Saturday', 'Sunday'].includes(dayOfWeek)
+  };
+}
+
+/**
+ * Filter and validate suggestions
+ */
+function filterSuggestions(suggestions) {
+  if (!Array.isArray(suggestions)) {
+    throw new Error('Invalid suggestions format');
+  }
+
+  return suggestions
+    .filter(suggestion => {
+      // Ensure suggestion has required fields
+      if (!suggestion.title || !suggestion.reason) {
+        return false;
+      }
+
+      // Filter out inappropriate content
+      const text = `${suggestion.title} ${suggestion.reason}`.toLowerCase();
+      return !inappropriateWords.some(word => text.includes(word));
+    })
+    .slice(0, 5) // Limit to max 5 suggestions
+    .map(suggestion => ({
+      title: suggestion.title.trim(),
+      reason: suggestion.reason.trim()
+    }));
+}
+
+/**
+ * Build smart context for AI prompt
+ */
+async function buildSmartContext(userProfile) {
+  const timeContext = getTimeContext();
+  const weatherData = await getWeatherData(userProfile.location);
+
+  const context = {
+    ...timeContext,
+    weather: weatherData ? {
+      temperature: weatherData.temperature,
+      condition: weatherData.condition,
+      description: weatherData.description
+    } : null,
+    user_preferences: {
+      diet: userProfile.diet || 'any',
+      budget: userProfile.budget || 'any',
+      location: userProfile.location
+    }
+  };
+
+  return context;
+}
+
+/**
+ * Generate smart prompt for OpenAI
+ */
+function buildSmartPrompt(category, userInput, userProfile, context, language = 'en') {
+  const isMultilingual = language !== 'en';
+  const languageInstruction = isMultilingual ? `Respond in ${language}.` : '';
+
+  let prompt = `You are Kicko AI, an intelligent daily decision assistant. ${languageInstruction}\n\n`;
+  prompt += `Category: ${category}\n`;
+  prompt += `User Request: ${userInput}\n\n`;
+  
+  // Add context information
+  prompt += `Current Context:\n`;
+  prompt += `- Time of Day: ${context.time_of_day}\n`;
+  prompt += `- Day of Week: ${context.day_of_week}\n`;
+  if (context.weather) {
+    prompt += `- Weather: ${context.weather.temperature}°C, ${context.weather.description}\n`;
+  }
+  prompt += `- Location: ${context.user_preferences.location}\n`;
+  prompt += `- Diet: ${context.user_preferences.diet}\n`;
+  prompt += `- Budget: ${context.user_preferences.budget}\n\n`;
+
+  prompt += `Instructions:\n`;
+  prompt += `- Generate 3-5 personalized suggestions\n`;
+  prompt += `- Consider the current context (time, weather, location)\n`;
+  prompt += `- Make suggestions practical and actionable\n`;
+  prompt += `- Return only a JSON object with a "suggestions" array\n`;
+  prompt += `- Each suggestion must have "title" and "reason" fields\n`;
+  prompt += `- Keep suggestions appropriate and family-friendly\n\n`;
+
+  return prompt;
+}
+
+/**
+ * Main ask endpoint - generates AI-powered suggestions with smart context
  */
 app.post('/ask', async (req, res) => {
   try {
@@ -45,10 +242,9 @@ app.post('/ask', async (req, res) => {
       });
     }
 
-    // Validate user_profile if provided
-    if (user_profile && typeof user_profile !== 'object') {
+    if (!user_profile || !user_profile.location || typeof user_profile.location !== 'string') {
       return res.status(400).json({
-        error: 'Invalid user_profile field. User profile must be an object.'
+        error: 'Missing or invalid user_profile.location field. Location is required.'
       });
     }
 
@@ -60,16 +256,23 @@ app.post('/ask', async (req, res) => {
       });
     }
 
-    // Build dynamic prompt for OpenAI
-    const prompt = buildPrompt(category, user_input, user_profile);
+    // Generate session ID for history tracking
+    const sessionId = req.headers['x-session-id'] || uuidv4();
+
+    // Build smart context
+    const context = await buildSmartContext(user_profile);
+    
+    // Build smart prompt
+    const language = user_profile.language || 'en';
+    const prompt = buildSmartPrompt(category, user_input, user_profile, context, language);
 
     // Call OpenAI API
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4',
       messages: [
         {
           role: 'system',
-          content: 'You are Kicko AI, an intelligent daily decision assistant. Generate 3-5 personalized suggestions based on the user\'s request and preferences. Always respond with a JSON object containing a "suggestions" array. Each suggestion must have "title" and "reason" fields. Be helpful, practical, and consider the user\'s context.'
+          content: 'You are Kicko AI, an intelligent daily decision assistant. Always respond with valid JSON containing a "suggestions" array. Each suggestion must have "title" and "reason" fields. Be helpful, practical, and consider the user\'s context.'
         },
         {
           role: 'user',
@@ -94,19 +297,35 @@ app.post('/ask', async (req, res) => {
       throw new Error('Invalid JSON response from OpenAI');
     }
 
-    // Validate response structure
-    if (!result.suggestions || !Array.isArray(result.suggestions)) {
-      throw new Error('Invalid response format: missing suggestions array');
+    // Filter and validate suggestions
+    const filteredSuggestions = filterSuggestions(result.suggestions);
+
+    // Store in user history (last 3 responses)
+    if (!userHistory.has(sessionId)) {
+      userHistory.set(sessionId, []);
+    }
+    
+    const history = userHistory.get(sessionId);
+    history.unshift({
+      timestamp: new Date().toISOString(),
+      category,
+      user_input,
+      suggestions: filteredSuggestions,
+      context
+    });
+    
+    // Keep only last 3 responses
+    if (history.length > 3) {
+      history.splice(3);
     }
 
-    // Ensure each suggestion has required fields
-    const suggestions = result.suggestions.map((suggestion, index) => ({
-      title: suggestion.title || `Suggestion ${index + 1}`,
-      reason: suggestion.reason || 'No reason provided'
-    }));
-
     // Return structured response
-    res.json({ suggestions });
+    res.json({ 
+      suggestions: filteredSuggestions,
+      context,
+      session_id: sessionId,
+      history_count: history.length
+    });
 
   } catch (error) {
     console.error('Error in /ask endpoint:', error);
@@ -141,40 +360,29 @@ app.post('/ask', async (req, res) => {
 });
 
 /**
- * Build a dynamic prompt string based on user input and profile
+ * Get user history endpoint
  */
-function buildPrompt(category, userInput, userProfile = {}) {
-  let prompt = `Category: ${category}\n`;
-  prompt += `User Request: ${userInput}\n\n`;
+app.get('/history/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const history = userHistory.get(sessionId) || [];
   
-  // Add user profile information if provided
-  const hasProfile = userProfile.diet || userProfile.location || userProfile.budget;
-  
-  if (hasProfile) {
-    prompt += 'User Profile:\n';
-    if (userProfile.diet) prompt += `- Diet: ${userProfile.diet}\n`;
-    if (userProfile.location) prompt += `- Location: ${userProfile.location}\n`;
-    if (userProfile.budget) prompt += `- Budget: ${userProfile.budget}\n`;
-    prompt += '\n';
-  }
-  
-  prompt += `Please provide 3-5 personalized suggestions for "${category}" based on the user's request`;
-  if (hasProfile) {
-    prompt += ' and their profile information';
-  }
-  prompt += '. Each suggestion should be practical and actionable.';
-  
-  return prompt;
-}
+  res.json({
+    session_id: sessionId,
+    history: history,
+    count: history.length
+  });
+});
 
 /**
- * Health check endpoint
+ * Clear user history endpoint
  */
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    service: 'Kicko AI Backend'
+app.delete('/history/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  userHistory.delete(sessionId);
+  
+  res.json({
+    message: 'History cleared successfully',
+    session_id: sessionId
   });
 });
 
@@ -184,7 +392,8 @@ app.get('/health', (req, res) => {
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
-    message: `The requested endpoint ${req.originalUrl} does not exist.`
+    message: `The requested endpoint ${req.originalUrl} does not exist.`,
+    available_endpoints: ['GET /', 'GET /health', 'POST /ask', 'GET /history/:sessionId', 'DELETE /history/:sessionId']
   });
 });
 
@@ -204,9 +413,14 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Kicko AI backend server running on port ${PORT}`);
   console.log(`📡 API endpoints:`);
   console.log(`   GET  / - Status check`);
-  console.log(`   POST /ask - Generate AI suggestions`);
   console.log(`   GET  /health - Health check`);
+  console.log(`   POST /ask - Generate AI suggestions`);
+  console.log(`   GET  /history/:sessionId - Get user history`);
+  console.log(`   DELETE /history/:sessionId - Clear user history`);
   console.log(`🔑 OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+  console.log(`🌤️  Weather API Key: ${process.env.WEATHER_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+  console.log(`💾 In-memory history: Enabled`);
+  console.log(`🌍 Multilingual support: Enabled`);
 });
 
 export default app; 
