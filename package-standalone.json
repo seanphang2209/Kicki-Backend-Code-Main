@@ -1,0 +1,31 @@
+{
+  "name": "kicko-ai-backend",
+  "version": "1.0.0",
+  "description": "Kicko AI - An AI-powered daily decision assistant backend",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "openai",
+    "express",
+    "api",
+    "decision-assistant",
+    "kicko"
+  ],
+  "author": "Kicko AI Team",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "openai": "^5.5.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+} 
