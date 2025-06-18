@@ -1,0 +1,76 @@
+You are an experienced backend developer.  
+Write a complete Node.js backend API using Express that serves an endpoint `/ask` to handle POST requests with JSON input for the Kicko AI assistant.  
+
+Requirements:
+- The endpoint `/ask` receives a JSON payload containing:  
+  ```json
+  {
+    "category": "What to Eat",
+    "user_input": "I'm feeling tired and want something quick and healthy.",
+    "user_profile": {
+      "diet": "vegetarian",
+      "location": "Singapore",
+      "budget": "under $10"
+    }
+  }
+Validate the input data; respond with a 400 error if missing required fields.
+
+Integrate with OpenAI’s GPT-4 API to generate AI-powered suggestions.
+
+Construct a prompt dynamically based on the input JSON to query OpenAI, including all relevant fields: category, user input, and profile.
+
+Return the AI response JSON to the client with a clean structure, for example:
+
+json
+Copy
+Edit
+{
+  "suggestions": [
+    {
+      "title": "Quinoa salad from nearby cafe",
+      "reason": "Light, healthy, and under $10."
+    },
+    {
+      "title": "Make a quick avocado toast at home",
+      "reason": "Simple and nutritious."
+    }
+  ]
+}
+Use environment variables for the OpenAI API key securely.
+
+Add CORS support to allow requests from the Kicko frontend.
+
+Include error handling for API failures.
+
+Provide instructions for how to run and test the API on Replit.
+
+Also, create a simple root / GET endpoint that returns "Kicko AI backend is running."
+
+Use ES6 syntax, async/await, and clean modular code style.
+
+vbnet
+Copy
+Edit
+
+---
+
+# 2️⃣ Detailed Prompt for Cursor AI (To Help Write & Refine Code)
+
+```markdown
+You are an expert AI coding assistant.  
+
+Help me write and improve Node.js backend code for a Kicko AI assistant API on Replit.
+
+I need to:
+- Implement an Express server with POST `/ask` endpoint.
+- Validate incoming JSON request body for required fields.
+- Dynamically build a prompt string for OpenAI GPT-4 API based on the input JSON (category, user_input, user_profile).
+- Call OpenAI’s chat completion API using best practices.
+- Return the structured suggestions back to the frontend.
+- Handle errors gracefully.
+- Use environment variables for the OpenAI API key.
+- Add CORS support.
+- Write clear comments explaining each section.
+- Make the code clean, readable, and modular.
+
+Help me write this incrementally, and suggest improvements as we go.
