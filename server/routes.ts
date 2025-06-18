@@ -22,8 +22,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     credentials: true
   }));
 
-  // Root endpoint
-  app.get("/", (req, res) => {
+  // Root endpoint - only for API status check
+  app.get("/api", (req, res) => {
     res.json({ message: "Kicko AI backend is running." });
   });
 
